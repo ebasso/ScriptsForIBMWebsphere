@@ -1,5 +1,6 @@
-# ScriptsForIBMWebsphere
-Scripts For IBM WebSphere software
+# Scripts For IBM WebSphere software
+
+## Portal rc script
 
 
 Commands:    ./rc_portal { start | stop | restart } [-WAS_PASSWORD  PASSWORD]
