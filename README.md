@@ -5,7 +5,7 @@ These scripts help on daily basis tasks for IBM WebSphere Application Server bas
 
 Directories:
 
-<b>Portal</b> -> scripts for IBM WebSphere Portal
+* <b>Portal</b> -> scripts for IBM WebSphere Portal
  
-<b>Sametime</b> -> scripts for IBM Sametime
+* <b>Sametime</b> -> scripts for IBM Sametime
 
