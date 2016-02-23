@@ -1,0 +1,649 @@
+#! /bin/sh
+# change this to #!/bin/ksh for AIX and Solaris
+########################################################################
+# chkconfig: 345 99 15
+# description: IBM Lotus Sametime 8.5
+
+### BEGIN INIT INFO
+# Provides: rc_sametime
+# Required-Start: $remote_fs $syslog$network
+# Required-Stop:  $remote_fs $syslog
+# Default-Start:  3 5
+# Default-Stop:   0 1 2 6
+# Short-Description: IBM Lotus Sametime Unix Script version 20100818.03
+# Author: 2010 by Enio Basso ( http://ebasso.net )  
+# Copyright (C) 2010 Creative Commons
+# License: GNU GPL v2 or (at your option) any later version.
+### END INIT INFO
+
+# Version V3 20100812.01
+# Version V2 20100511.01
+########################################################################
+
+WAS_HOME=/opt/IBM/WebSphere/AppServer
+SAMETIME_HOME=$WAS_HOME/profiles
+USERNAME=wasadmin
+PASSWORD=wasadmin
+
+SAMETIME_HOME_SSC=$SAMETIME_HOME
+SAMETIME_HOME_PROXY=$SAMETIME_HOME
+SAMETIME_HOME_MEETING=$SAMETIME_HOME
+SAMETIME_HOME_MEDIA=$SAMETIME_HOME
+
+PROFILE_NAME=`hostname -s`
+PROFILE_NR=Profile1
+
+PROXY_DM_PROFILE=$PROFILE_NAME"ProxyDM"$PROFILE_NR
+PROXY_PN_PROFILE=$PROFILE_NAME"ProxyPN"$PROFILE_NR
+MEETING_DM_PROFILE=$PROFILE_NAME"MeetingDM"$PROFILE_NR
+MEETING_PN_PROFILE=$PROFILE_NAME"MeetingPN"$PROFILE_NR
+MEDIA_DM_PROFILE=$PROFILE_NAME"MediaDM"$PROFILE_NR
+MEDIA_PN_PROFILE=$PROFILE_NAME"MediaPN"$PROFILE_NR
+#PROXY_DM_PROFILE=sauraProxyDMProfile1
+#PROXY_PN_PROFILE=sauraProxyPNProfile1
+#MEETING_DM_PROFILE=melroMeetingDMProfile1
+#MEETING_PN_PROFILE=melroMeetingPNProfile1
+#MEDIA_DM_PROFILE=queteMediaDMProfile1
+#MEDIA_PN_PROFILE=queteMediaPNProfile1
+
+
+
+# --------------------------------------- Advanced Parameters  -------------------------------
+#SCRIPT_LANG=en_US.UTF-8
+SCRIPT_DEBUG_MODE="yes"
+
+# ----------------------------------------- Default Values ------------------------------------
+
+# Enable script debug output
+if [ -z "$SCRIPT_DEBUG_MODE" ]; then
+  SCRIPT_DEBUG_MODE="no"
+fi
+
+# ------------ Helper Functions   -------------------------------------
+SCRIPT_NAME=$0
+CMD=$1
+PARAM1=$2
+PARAM2=$3
+PARAM3=$4
+
+DebugText ()
+{
+  if [ "$SCRIPT_DEBUG_MODE" = "yes" ]; then
+    echo "Debug:" $1 $2 $3 $4 $5 $6 $7 $8 $9
+  fi
+
+  return 0
+}
+
+GetSystemArchitecture ()
+{
+  # Determine architecture and platform
+  if [ `uname` = AIX ]; then
+    LARCH=ibmpow
+    PLATFORM_NAME=AIX
+  elif [ `uname` = SunOS ]; then
+    if [ `uname -p` = sparc ]; then
+      LARCH=sunspa
+      PLATFORM_NAME=Solaris
+    else
+      LARCH=sunx86
+      PLATFORM_NAME=Solaris/x86
+    fi
+  elif [ `uname` = Linux ]; then
+    LARCH=linux
+    UNAME=`uname -m`
+    if [ $UNAME = s390 ]; then
+      PLATFORM_NAME=zLinux
+    elif [ $UNAME = s390x ]; then
+      PLATFORM_NAME=zLinux
+    else
+      PLATFORM_NAME=xLinux
+    fi
+  
+    # Query linux distribution
+    if [ ${LARCH} = "linux" ]; then
+      if [ -e /etc/SuSE-release ]; then
+        LINUX_DISTRIBUTION=suse
+      elif [ -e /etc/redhat-release ]; then
+        LINUX_DISTRIBUTION=redhat
+      else
+        LINUX_DISTRIBUTION=unknown
+      fi
+    fi
+  
+  fi
+  
+  if [ -z "$LARCH" ]; then
+    echo "Unknown platform `uname`"
+    exit 1
+  fi
+
+  return 0
+}
+
+usage ()
+{
+  echo ""
+  echo "Usage: $0 { start | stop | restart | reload }  { [service] }"
+  echo "Service: { ssc | sscDM | sscServer | proxy | proxyDM | proxyServer } "
+  echo "Service: { meeting | meetingDM | meetingServer | media | mediaDM | mediaServer }"
+  echo "Admin Commands: $0 { serverStatus [server] }"
+  echo ""
+
+  return 0
+}
+
+
+
+start_ssc_deploy_manager ()
+{
+  # Sametime Deployment manager
+  if [ -d "$SAMETIME_HOME_SSC/STSCDMgrProfile" ] ; then
+     echo -n "Starting Deployment Manager: "
+     $SAMETIME_HOME/STSCDMgrProfile/bin/startManager.sh
+     echo "OK"
+  else
+       DebugText "ST SSC Deploy Mgmr home not available:" [$SAMETIME_HOME_SSC/STSCDMgrProfile]
+  fi
+ 
+  return 0
+}
+
+start_ssc_server ()
+{
+  # Sametime System Console Server
+  if [ -d "$SAMETIME_HOME_SSC/STSCAppProfile" ] ; then
+     echo -n "Starting Console Server NodeAgent: "
+     $SAMETIME_HOME_SSC/STSCAppProfile/bin/startNode.sh
+     echo "OK"
+     
+     echo -n "Starting Console Server: "
+     $SAMETIME_HOME_SSC/STSCAppProfile/bin/startServer.sh STConsoleServer
+     echo "OK"
+  else
+       DebugText "ST SSC home not available:" [$SAMETIME_HOME_SSC/STSCAppProfile]
+  fi
+ 
+  return 0
+}
+
+stop_ssc_deploy_manager ()
+{
+  # Sametime Deployment manager
+  if [ -d "$SAMETIME_HOME_SSC/STSCDMgrProfile" ] ; then   
+     echo -n "Stopping Deployment Manager: "
+     $SAMETIME_HOME_SSC/STSCDMgrProfile/bin/stopManager.sh -username $USERNAME -password $PASSWORD
+     echo "OK"
+  else
+       DebugText "ST SSC Deploy Mgmr home not available:" [$SAMETIME_HOME_SSC/STSCDMgrProfile]
+  fi 
+
+  return 0
+}
+
+stop_ssc_server ()
+{
+  # Sametime System Console Server
+  if [ -d "$SAMETIME_HOME_SSC/STSCAppProfile" ] ; then
+     echo -n "Stopping Console Server: "
+     $SAMETIME_HOME_SSC/STSCAppProfile/bin/stopServer.sh STConsoleServer -username $USERNAME -password $PASSWORD
+     echo "OK"
+     
+     echo -n "Stopping Console Server NodeAgent: "
+     $SAMETIME_HOME_SSC/STSCAppProfile/bin/stopNode.sh -username $USERNAME -password $PASSWORD
+     echo "OK"
+  else
+       DebugText "ST SSC home not available:" [$SAMETIME_HOME_SSC/STSCAppProfile]
+  fi
+  
+  return 0
+}
+
+
+
+start_proxy_deploy_manager ()
+{
+  # Sametime PROXY Server
+  if [ -d "$SAMETIME_HOME_PROXY/$PROXY_DM_PROFILE" ] ; then
+     echo -n "Starting PROXY Server Manager: "
+     $SAMETIME_HOME_PROXY/$PROXY_DM_PROFILE/bin/startManager.sh
+     echo "OK"  
+  else
+       DebugText "ST Proxy Server Deploy Mgmr home not available:" [$SAMETIME_HOME_PROXY/$PROXY_DM_PROFILE]
+  fi
+ 
+  return 0
+}
+
+start_proxy_server ()
+{
+  # Sametime PROXY Server
+  if [ -d "$SAMETIME_HOME_PROXY/$PROXY_PN_PROFILE" ] ; then
+     echo -n "Starting PROXY Server NodeAgent: "
+     $SAMETIME_HOME_PROXY/$PROXY_PN_PROFILE/bin/startNode.sh
+     echo "OK"
+ 
+     echo -n "Starting PROXY Server: "
+     $SAMETIME_HOME_PROXY/$PROXY_PN_PROFILE/bin/startServer.sh STProxyServer
+     echo "OK"
+  else
+     DebugText "ST Proxy Server home not available:" [$SAMETIME_HOME_PROXY/$PROXY_PN_PROFILE]
+  fi
+ 
+  return 0
+}
+
+stop_proxy_deploy_manager ()
+{
+  # Sametime PROXY Server
+  if [ -d "$SAMETIME_HOME_PROXY/$PROXY_DM_PROFILE" ] ; then
+     echo -n "Stopping PROXY Server Manager: "
+     $SAMETIME_HOME_PROXY/$PROXY_DM_PROFILE/bin/stopManager.sh -username $USERNAME -password $PASSWORD
+     echo "OK"  
+  else
+       DebugText "ST Proxy Server Deploy Mgmr home not available:" [$SAMETIME_HOME_PROXY/$PROXY_DM_PROFILE]
+  fi
+  
+  return 0
+}
+
+stop_proxy_server ()
+{
+  # Sametime PROXY Server
+  if [ -d "$SAMETIME_HOME_PROXY/$PROXY_PN_PROFILE" ] ; then
+  
+     echo -n "Stopping PROXY Server: "
+     $SAMETIME_HOME_PROXY/$PROXY_PN_PROFILE/bin/stopServer.sh STProxyServer -username $USERNAME -password $PASSWORD
+     echo "OK"
+	
+     echo -n "Stopping PROXY Server NodeAgent: "
+     $SAMETIME_HOME_PROXY/$PROXY_PN_PROFILE/bin/stopNode.sh -username $USERNAME -password $PASSWORD
+     echo "OK"
+  else
+     DebugText "ST Proxy Server home not available:" [$SAMETIME_HOME_PROXY/$PROXY_PN_PROFILE]
+  fi
+  
+  return 0
+}
+
+start_meeting_deploy_manager ()
+{
+  # Sametime MEETING Server
+  if [ -d "$SAMETIME_HOME_MEETING/$MEETING_DM_PROFILE" ] ; then
+     echo -n "Starting MEETING Server Manager: "
+     $SAMETIME_HOME_MEETING/$MEETING_DM_PROFILE/bin/startManager.sh
+     echo "OK"
+  else
+     DebugText "ST Meeting Server Deploy Mgmr home not available:" [$SAMETIME_HOME_MEETING/$MEETING_DM_PROFILE]
+  fi
+ 
+  return 0
+}
+
+start_meeting_server ()
+{
+  # Sametime MEETING Server
+  if [ -d "$SAMETIME_HOME_MEETING/$MEETING_PN_PROFILE" ] ; then
+     
+     echo -n "Starting MEETING Server NodeAgent: "
+     $SAMETIME_HOME_MEETING/$MEETING_PN_PROFILE/bin/startNode.sh
+     echo "OK"
+     	
+     echo -n "Starting MEETING Server: "
+     $SAMETIME_HOME_MEETING/$MEETING_PN_PROFILE/bin/startServer.sh STMeetingServer
+     echo "OK"
+     
+     echo -n "Starting MEETING HttpProxy: "
+     $SAMETIME_HOME_MEETING/$MEETING_PN_PROFILE/bin/startServer.sh STMeetingHttpProxy
+     echo "OK"
+  else
+     DebugText "ST Meeting Server home not available:" [$SAMETIME_HOME_MEETING/$MEETING_PN_PROFILE]
+   fi
+ 
+  return 0
+}
+
+stop_meeting_deploy_manager ()
+{
+  # Sametime MEETING Server
+  
+  if [ -d "$SAMETIME_HOME_MEETING/$MEETING_DM_PROFILE" ] ; then
+     echo -n "Stopping MEETING Server Manager: "
+     $SAMETIME_HOME_MEETING/$MEETING_DM_PROFILE/bin/stopManager.sh -username $USERNAME -password $PASSWORD
+     echo "OK"
+  else
+     DebugText "ST Meeting Server Deploy Mgmr home not available:" [$SAMETIME_HOME_MEETING/$MEETING_DM_PROFILE]
+  fi
+ 
+  return 0
+}
+
+stop_meeting_server ()
+{
+  # Sametime MEETING Server
+ 
+   if [ -d "$SAMETIME_HOME_MEETING/$MEETING_PN_PROFILE" ] ; then
+		
+        echo -n "Stopping MEETING HttpProxy: "
+        $SAMETIME_HOME_MEETING/$MEETING_PN_PROFILE/bin/stopServer.sh STMeetingHttpProxy -username $USERNAME -password $PASSWORD
+        echo "OK"
+        
+        echo -n "Stopping MEETING Server: "
+        $SAMETIME_HOME_MEETING/$MEETING_PN_PROFILE/bin/stopServer.sh STMeetingServer -username $USERNAME -password $PASSWORD
+        echo "OK"
+ 
+        echo -n "Stopping MEETING Server NodeAgent: "
+        $SAMETIME_HOME_MEETING/$MEETING_PN_PROFILE/bin/stopNode.sh -username $USERNAME -password $PASSWORD
+        echo "OK"	
+  else
+     DebugText "ST Meeting Server home not available:" [$SAMETIME_HOME_MEETING/$MEETING_PN_PROFILE]
+  fi
+           
+  return 0
+}
+
+
+start_media_deploy_manager ()
+{
+  # Sametime MEDIA Server 
+  if [ -d "$SAMETIME_HOME_MEDIA/$MEDIA_DM_PROFILE" ] ; then
+     echo -n "Starting MEDIA Server Manager: "
+     $SAMETIME_HOME_MEDIA/$MEDIA_DM_PROFILE/bin/startManager.sh
+     echo "OK"
+  else
+     DebugText "ST Media Server Deploy Mgmr home not available:" [$SAMETIME_HOME_MEDIA/$MEDIA_DM_PROFILE]
+  fi
+ 
+  return 0
+}
+
+start_media_server ()
+{
+  # Sametime MEDIA Server 
+  if [ -d "$SAMETIME_HOME_MEDIA/$MEDIA_PN_PROFILE" ] ; then
+  
+    echo -n "Starting MEDIA Server NodeAgent: "
+    $SAMETIME_HOME_MEDIA/$MEDIA_PN_PROFILE/bin/startNode.sh
+    echo "OK"
+  
+    echo -n "Starting MEDIA Server: "
+    $SAMETIME_HOME_MEDIA/$MEDIA_PN_PROFILE/bin/startServer.sh STMediaServer
+    echo "OK"
+  else
+     DebugText "ST Media Server home not available:" [$SAMETIME_HOME_MEDIA/$MEDIA_PN_PROFILE]
+  fi
+ 
+  return 0
+}
+
+stop_media_deploy_manager ()
+{
+  # Sametime MEDIA Server 
+     
+     if [ -d "$SAMETIME_HOME_MEDIA/$MEDIA_DM_PROFILE" ] ; then
+        echo -n "Stopping MEDIA Server Manager: "
+        $SAMETIME_HOME_MEDIA/$MEDIA_DM_PROFILE/bin/stopManager.sh -username $USERNAME -password $PASSWORD
+        echo "OK"
+     else
+        DebugText "ST Media Server Deploy Mgmr home not available:" [$SAMETIME_HOME_MEDIA/$MEDIA_DM_PROFILE]
+     fi
+  return 0
+}
+
+stop_media_server ()
+{
+  # Sametime MEDIA Server 
+  if [ -d "$SAMETIME_HOME_MEDIA/$MEDIA_PN_PROFILE" ] ; then
+     echo -n "Stopping MEDIA Server: "
+     $SAMETIME_HOME_MEDIA/$MEDIA_PN_PROFILE/bin/stopServer.sh STMediaServer -username $USERNAME -password $PASSWORD
+     echo "OK"
+     
+     echo -n "Stopping MEDIA Server NodeAgent: "
+     $SAMETIME_HOME_MEDIA/$MEDIA_PN_PROFILE/bin/stopNode.sh -username $USERNAME -password $PASSWORD
+     echo "OK"
+  else
+    DebugText "ST Media Server home not available:" [$SAMETIME_HOME_MEDIA/$MEDIA_PN_PROFILE]
+  fi  
+ 
+  return 0
+}
+
+check_server_status ()
+{
+  if  [ -z "$PARAM1" ]; then
+    OP1=-all
+  else
+    OP1=$PARAM1
+  fi
+    
+  if [ -f "$WAS_HOME/bin/serverStatus.sh" ] ; then
+     echo -n "Check server status: "
+     if [ "SECURITY_ENABLED" = "no" ]; then
+       echo
+       $WAS_HOME/bin/serverStatus.sh $OP1
+     else
+       echo
+       $WAS_HOME/bin/serverStatus.sh $OP1 -username $USERNAME -password $PASSWORD
+     fi
+     echo "OK"
+  else
+       DebugText "serverStatus.sh not available:" [$WAS_HOME/bin/serverStatus.sh]
+  fi
+ 
+  return 0
+}
+
+start_cmd ()
+{        
+   case "$PARAM1" in
+   ssc)
+     # Sametime Deployment manager
+      start_ssc_deploy_manager
+     # Sametime System Console Server
+      start_ssc_server
+   ;;
+   sscServer)
+     # Sametime System Console Server
+      start_ssc_server
+   ;;
+   sscDm)
+      # Sametime Deployment manager
+      start_ssc_deploy_manager
+   ;;
+   proxy)
+      # Sametime PROXY Server Deploy Manager
+      start_proxy_deploy_manager
+ 
+      # Sametime PROXY Server
+      start_proxy_server
+   ;;
+   proxyDM)
+      # Sametime PROXY Server Deploy Manager
+      start_proxy_deploy_manager
+   ;;
+   proxyServer)
+      # Sametime PROXY Server
+      start_proxy_server
+   ;;
+   meeting)
+      # Sametime MEETING Server Deploy Manager
+      start_meeting_deploy_manager
+ 
+      # Sametime MEETING Server
+      start_meeting_server
+   ;;
+   meetingDM)
+      # Sametime MEETING Server Deploy Manager
+      start_meeting_deploy_manager
+   ;;
+   meetingServer) 
+      # Sametime MEETING Server
+      start_meeting_server
+   ;;
+   media)
+      # Sametime MEDIA Deploy Manager
+      start_media_deploy_manager
+ 
+      # Sametime MEDIA Server
+      start_media_server                        
+   ;;
+   mediaDM)
+      # Sametime MEDIA Deploy Manager
+      start_media_deploy_manager                
+   ;;
+   mediaServer)
+      # Sametime MEDIA Server
+      start_media_server        
+   ;;
+   *)
+     
+      # Sametime Deployment manager
+      start_ssc_deploy_manager
+      
+      # Sametime System Console Server
+      start_ssc_server
+ 
+      # Sametime PROXY Server Deploy Manager
+      start_proxy_deploy_manager
+ 
+      # Sametime PROXY Server
+      start_proxy_server
+ 
+      # Sametime MEETING Server Deploy Manager
+      start_meeting_deploy_manager
+ 
+      # Sametime MEETING Server
+      start_meeting_server
+ 
+      # Sametime MEDIA Deploy Manager
+      start_media_deploy_manager
+ 
+      # Sametime MEDIA Server
+      start_media_server                        
+   ;;
+   esac       
+}
+
+stop_cmd ()
+{        
+   case "$PARAM1" in
+   ssc)
+     # Sametime System Console Server
+      stop_ssc_server
+
+     # Sametime Deployment manager
+      stop_ssc_deploy_manager
+   ;;
+   sscServer)
+     # Sametime System Console Server
+      stop_ssc_server
+   ;;
+   sscDm)
+      # Sametime Deployment manager
+      stop_ssc_deploy_manager
+   ;;
+   proxy)
+      # Sametime PROXY Server
+      stop_proxy_server
+      # Sametime PROXY Server Deploy Manager
+      stop_proxy_deploy_manager
+   ;;
+   proxyDM)
+      # Sametime PROXY Server Deploy Manager
+      stop_proxy_deploy_manager
+   ;;
+   proxyServer)
+      # Sametime PROXY Server
+      stop_proxy_server
+   ;;
+   meeting)
+      # Sametime MEETING Server
+      stop_meeting_server
+      # Sametime MEETING Server Deploy Manager
+      stop_meeting_deploy_manager
+   ;;
+   meetingDM)
+      # Sametime MEETING Server Deploy Manager
+      stop_meeting_deploy_manager
+   ;;
+   meetingServer) 
+      # Sametime MEETING Server
+      stop_meeting_server
+   ;;
+   media)
+      # Sametime MEDIA Server
+      stop_media_server                        
+      # Sametime MEDIA Deploy Manager
+      stop_media_deploy_manager
+   ;;
+   mediaDM)
+      # Sametime MEDIA Deploy Manager
+      stop_media_deploy_manager                
+   ;;
+   mediaServer)
+      # Sametime MEDIA Server
+      stop_media_server        
+   ;;
+
+   *)
+      # Sametime MEDIA Server
+      stop_media_server 
+
+      # Sametime MEDIA Deploy Manager
+      stop_media_deploy_manager
+ 
+      # Sametime MEETING Server
+      stop_meeting_server
+ 
+      # Sametime MEETING Server Deploy Manager
+      stop_meeting_deploy_manager 
+
+      # Sametime PROXY Server
+      stop_proxy_server
+ 
+      # Sametime PROXY Server Deploy Manager
+      stop_proxy_deploy_manager
+ 
+      # Sametime System Console Server
+      stop_ssc_server
+ 
+      # Sametime Deployment manager
+      stop_ssc_deploy_manager
+    
+   ;;
+   esac       
+}
+
+###########################################################   Main Script ##############################################################3
+
+# Determine architecture and platform
+#GetSystemArchitecture
+#echo $PLATFORM_NAME
+
+# --- Sanity check for server environment ---
+
+
+case "$CMD" in
+   start)
+ 	start_cmd 
+   ;;
+   stop)
+	stop_cmd
+  ;;
+  reload|restart)
+     $0 stop $PARAM1
+     $0 start $PARAM1
+  ;;
+  serverStatus)
+     check_server_status 
+  ;;
+  *)
+     DebugText "Invalid PARAM:" [$CMD]
+     usage 
+     exit 1
+  ;;
+esac
+exit 0
+
+
+

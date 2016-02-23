@@ -1,0 +1,324 @@
+#! /bin/bash
+### BEGIN INIT INFO
+# Provides: sametimevmgr
+# Required-Start: $remote_fs $syslog$network
+# Required-Stop:  $remote_fs $syslog
+# Default-Start:  3 5
+# Default-Stop:   0 1 2 6
+# chkconfig: 2345 80 30
+# Short-Description: IBM Sametime Video Manager startup script
+# Author: 2015 by Enio Basso ( http://ebasso.net )  
+# Copyright (C) 2010 Creative Commons
+# License: GNU GPL v2 or (at your option) any later version.
+### END INIT INFO
+
+# Version V1 20150212.01
+########################################################################
+
+
+PROFILE_NAME=<profileNameSTMSPNProfile1>
+
+WAS_USERNAME=wasadmin
+WAS_PASSWORD=<PASSWORD>
+
+SOLID_USERNAME=admin
+SOLID_PASSWORD=admin
+
+SERVER_NAME=STMediaServer
+
+# ------------ Helper Functions   -------------------------------------
+SCRIPT_NAME=$0
+CMD=$1
+PARAM1=$2
+PARAM2=$3
+PARAM3=$4
+
+check_errmsg_and_exit() {
+  if [ $? -ne 0 ]; then
+     #log_error $1
+     echo $1
+     #cd $SCRIPT_PWD
+     exit 1
+  fi
+}
+
+errmsg_and_exit() {
+  # log_error $1
+  echo $1
+  #cd $SCRIPT_PWD
+  exit 1
+}
+
+###########################################################   Main Script ##############################################################3
+
+usage ()
+{
+  echo ""
+  echo "Usage: $0 { start | stop | restart | reload }"
+  echo ""
+  echo "Service: { soliddb_start | soliddb_stop | soliddb_status } "
+  echo "Service: { vmgr_start | vmgr_stop | vmgr_status }"
+  echo ""
+
+  return 0
+}
+
+######################################################
+#  Function:  start_server
+#  Description:   start server
+#  Returns:
+#		0 - specified stop portal successfully
+######################################################
+vmgr_start () {
+  local shellFile="/opt/IBM/WebSphere/AppServer/profiles/$PROFILE_NAME/bin/startServer.sh"
+  local pidFile="/opt/IBM/WebSphere/AppServer/profiles/$PROFILE_NAME/logs/$SERVER_NAME/$SERVER_NAME.pid"
+  local shellCmd="$shellFile $SERVER_NAME"
+  
+  echo "Starting Video Manager: "
+
+  SERVICE_PID=`ps aux | grep standalone | grep -v grep | awk '{print $2}'`;
+  if [ $SERVICE_PID ]; then
+     echo "-------------> SOLIDDB Server (pid $SERVICE_PID) is running...";
+  else
+     echo "-------------> SOLIDDB-Server is not running";
+     exit 1;
+  fi
+
+
+  if [ ! -f "$shellFile" ] ; then
+     errmsg_and_exit "start_server: $SERVER_NAME - File [$shellFile] not found"
+  fi
+
+  local _PID_FILE=$pidFile
+  if [ -f ${_PID_FILE} ]; then
+     local _PID_WAS=`cat ${_PID_FILE}`
+     ps -e | grep -v grep | grep $_PID_WAS > /dev/null
+     if [ $? -eq 0  ]; then
+          echo -n "Já iniciando: "
+          echo -n "[OK]"
+        return 0
+     fi
+  fi  
+
+  $shellCmd
+  check_errmsg_and_exit "start_server: $SERVER_NAME [ERROR]"
+
+  echo  "-- Server Started"
+  return 0
+}
+
+######################################################
+#  Function:  stop_server
+#  Description:   Executa a parada do 
+#  Returns:
+#		0 - specified stop portal successfully
+######################################################
+vmgr_stop () {
+  local shellFile="/opt/IBM/WebSphere/AppServer/profiles/$PROFILE_NAME/bin/stopServer.sh"
+  local pidFile="/opt/IBM/WebSphere/AppServer/profiles/$PROFILE_NAME/logs/$SERVER_NAME/$SERVER_NAME.pid"
+  local shellCmd="$shellFile $SERVER_NAME"
+
+  echo "Stopping Video Manager: "
+
+  if [ ! -f "$shellFile" ] ; then
+     errmsg_and_exit "vmgr_stop: $SERVER_NAME - File [$shellFile] not found"
+  fi
+
+  local _PID_FILE=$pidFile
+  if [ ! -f ${_PID_FILE} ]; then
+     echo "pid file not found - Server already stopped"
+     echo "[OK]"
+     return 0
+  fi
+
+  local _PID_WAS=`cat ${_PID_FILE}`
+  ps -e | grep -v grep | grep $_PID_WAS > /dev/null
+  if [ $? -ne 0  ]; then
+     echo "pid not found - Server already stopped"
+     echo "[OK]"
+     return 0
+  fi 
+         
+  $shellCmd -username $WAS_USERNAME -password $WAS_PASSWORD
+  check_errmsg_and_exit "vmgr_stop: $SERVER_NAME [ERROR]"
+       
+  echo "-- Server Stopped"
+  return 0
+}
+
+vmgr_status ()
+{
+  local shellFile="/opt/IBM/WebSphere/AppServer/profiles/$PROFILE_NAME/bin/serverStatus.sh"
+    
+  if [ -f "$shellFile" ] ; then
+     echo -n "Check server status: "
+     echo
+      $shellFile $SERVER_NAME -username $WAS_USERNAME -password $WAS_PASSWORD
+     echo "[OK]"
+  else
+       echo "serverStatus.sh not available:" [$WAS_HOME/bin/serverStatus.sh]
+  fi
+ 
+  return 0
+}
+
+
+soliddb_start ()
+{
+  local SOLIDDB_NAME="SolidDb 7.0"
+  #local shellFile="/opt/solidDB/soliddb-7.0/standalone_eval_server_start"
+  local shellFile="/opt/solidDB/soliddb-7.0/bin/solid"
+  local shellCmd="$shellFile -c /opt/solidDB/soliddb-7.0/eval_kit/standalone"
+  
+  echo "Starting SolidDb 7.0: "
+
+  if [ ! -f "$shellFile" ] ; then
+     errmsg_and_exit "soliddb_start: $SOLIDDB_NAME - File [$shellFile] not found"
+  fi
+
+  SERVICE_PID=`ps aux | grep standalone | grep -v grep | awk '{print $2}'`;
+  if [ $SERVICE_PID ]; then
+     echo "-------------> SOLIDDB Server (pid $SERVICE_PID) is running...";
+     echo "[OK]"
+     return 0
+  fi
+
+  $shellCmd
+  check_errmsg_and_exit "soliddb_start: $SERVER_NAME [ERROR]"
+
+  SERVICE_PID=`ps aux | grep standalone | grep -v grep | awk '{print $2}'`;
+  echo "-------------> SOLIDDB Server (pid $SERVICE_PID) started...";
+  echo "[OK]"
+  return 0
+}
+
+already_stopped(){
+ 
+  SERVICE_PID=`ps aux | grep standalone | grep -v grep | awk '{print $2}'`;
+  if [ ! $SERVICE_PID ]; then
+    echo  "-- Server Stopped"
+    echo "[OK]"
+    exit 0;
+  fi
+  echo -n ".";
+  sleep 2;
+}
+
+soliddb_stop ()
+{
+  local SOLIDDB_NAME="SolidDb 7.0"
+  #local shellFile="/opt/solidDB/soliddb-7.0/standalone_eval_server_stop"
+  #local shellCmd="$shellFile"
+  local shellFile="/opt/solidDB/soliddb-7.0/bin/solsql"
+  local shellCmd="$shellFile ""tcp localhost 2315"" admin admin /opt/solidDB/soliddb-7.0/stopargs.sql"
+  
+  echo "Stopping SolidDb 7.0: "
+
+  if [ ! -f "$shellFile" ] ; then
+     errmsg_and_exit "soliddb_start: $SOLIDDB_NAME - File [$shellFile] not found"
+  fi
+
+  SERVICE_PID=`ps aux | grep standalone | grep -v grep | awk '{print $2}'`;
+  if [ $SERVICE_PID ]; then
+     echo "-------------> SOLIDDB Server (pid $SERVICE_PID) is running...";
+  else
+     echo "-------------> SOLIDDB-Server is not running"
+     echo "[OK]"
+     return 0
+  fi
+  
+  echo "admin command 'shutdown force';"  > /opt/solidDB/soliddb-7.0/stopargs.sql
+  echo "exit;"                           >> /opt/solidDB/soliddb-7.0/stopargs.sql
+
+  $shellFile "tcp localhost 2315" admin admin /opt/solidDB/soliddb-7.0/stopargs.sql 
+  check_errmsg_and_exit "soliddb_start: $SERVER_NAME [ERROR]"
+
+  echo -n "------------> Waiting for server to stop: ";
+  already_stopped
+  already_stopped
+  already_stopped
+  already_stopped
+  already_stopped
+  already_stopped
+  already_stopped
+  already_stopped
+  already_stopped
+  already_stopped
+  
+  SERVICE_PID=`ps aux | grep standalone | grep -v grep | awk '{print $2}'`;
+  if [ $SERVICE_PID ]; then
+     echo "-------------> SOLIDDB Server (pid $SERVICE_PID) still running...";
+     exit 1;
+  fi
+  echo  "-- Server Stopped"
+  echo "[OK]"
+  return 0
+}
+
+soliddb_status ()
+{
+  SERVICE_PID=`ps aux | grep standalone | grep -v grep | awk '{print $2}'`;
+
+  #ps aux | grep -v grep | grep standalone > /dev/null
+  #if [ $? -eq 0  ]; then
+  if [ $SERVICE_PID ]; then
+     echo "-------------> SOLIDDB Server (pid $SERVICE_PID) is running...";
+  else
+     echo "-------------> SOLIDDB-Server is not running";
+  fi
+  return 0
+}
+
+
+case "$CMD" in
+  start)
+     soliddb_start
+     echo ""
+     echo "-------------> Pausing for 20 secs before start VMGR"
+     sleep 20;
+     vmgr_start
+  ;;
+  stop)
+      vmgr_stop
+     soliddb_stop
+  ;;
+  restart)
+     vmgr_stop
+     soliddb_stop
+     echo "-------------> Pausing for 20 secs before start SolidDb";
+     sleep 20;
+     soliddb_start
+     echo ""
+     echo "-------------> Pausing for 20 secs before start VMGR";
+     sleep 20;
+     vmgr_start
+  ;;
+  status)
+     soliddb_status 
+     echo ""
+     vmgr_status 
+  ;;
+  vmgr_start)
+    vmgr_start
+  ;;
+  vmgr_stop)
+    vmgr_stop
+  ;;
+  vmgr_status)
+    vmgr_status
+  ;;
+  soliddb_start)
+ 	soliddb_start
+  ;;
+  soliddb_stop)
+    soliddb_stop
+  ;;
+  soliddb_status)
+    soliddb_status
+  ;;
+  *)
+     usage 
+     exit 1
+  ;;
+esac
+exit 0
