@@ -1,14 +1,11 @@
-# ScriptsForIBMWebsphere
+
 Scripts For IBM WebSphere software
 
+These scripts help on daily basis tasks for IBM WebSphere Application Server based software.
 
-Commands:    ./rc_portal { start | stop | restart } [-WAS_PASSWORD  PASSWORD]
+Directories:
 
- DMgr:        ./rc_portal { startdmgr | stopdmgr } [-WAS_PASSWORD  PASSWORD]
- Node:        ./rc_portal { startnode | stopnode } [-WAS_PASSWORD  PASSWORD]
- IHS:         ./rc_portal { startihs | stopihs | statusihs }
- IHS Admin CTL: ./rc_portal { startadminctl | stopadminctl | statusadminctl }
+<b>Portal</b> -> scripts for IBM WebSphere Portal
+ 
+<b>Sametime</b> -> scripts for IBM Sametime
 
-
- Tools: ./rc_portal { serverstatus | kill | killnode | killdmgr }
- Diagnosis: ./rc_portal { generatedumpinfo | checkfilesystem }
