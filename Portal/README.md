@@ -5,6 +5,7 @@
 
 Commands:
      ./rc_portal { start | stop | restart } [-WAS_PASSWORD  PASSWORD]
+     
  DMgr:
      ./rc_portal { startdmgr | stopdmgr } [-WAS_PASSWORD  PASSWORD]
     
